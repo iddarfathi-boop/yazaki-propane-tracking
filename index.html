@@ -1,0 +1,436 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Yazaki KM9 | Suivi propane</title>
+<style>
+:root {
+  --navy:#17365d; --blue:#1769aa; --bg:#f3f6fa;
+  --green:#16845b; --red:#c0392b; --border:#dce3ec;
+}
+* { box-sizing:border-box; }
+body { margin:0; font-family:Arial,sans-serif; background:var(--bg); color:#243247; }
+header { background:var(--navy); color:white; padding:22px 5%; }
+header h1 { margin:0 0 6px; font-size:24px; }
+header p { margin:0; color:#d8e5f5; }
+nav { display:flex; flex-wrap:wrap; gap:8px; padding:14px 5%; background:white; border-bottom:1px solid var(--border); }
+button, .navbtn { border:0; border-radius:7px; padding:10px 14px; cursor:pointer; font-weight:600; }
+.navbtn { background:#edf2f8; color:var(--navy); }
+.navbtn.active, .primary { background:var(--blue); color:white; }
+.danger { background:var(--red); color:white; }
+.secondary { background:#e8edf3; color:#25354a; }
+main { max-width:1200px; margin:auto; padding:24px 5%; }
+.panel { display:none; }
+.panel.active { display:block; }
+.cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:14px; margin-bottom:22px; }
+.card, .box { background:white; border:1px solid var(--border); border-radius:12px; padding:18px; margin-bottom:16px; }
+.card small { color:#64748b; }
+.metric { font-size:26px; font-weight:bold; margin-top:10px; }
+h2 { color:var(--navy); font-size:21px; }
+h3 { margin-top:0; }
+form .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:14px; }
+label { display:block; font-weight:600; font-size:14px; margin-bottom:6px; }
+input, select, textarea { width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:7px; background:white; font:inherit; }
+input[readonly] { background:#f0f4f8; }
+.field { margin-bottom:12px; }
+.actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+table { width:100%; border-collapse:collapse; background:white; }
+th, td { padding:11px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; }
+th { background:#edf2f8; color:var(--navy); }
+.table-wrap { overflow-x:auto; border:1px solid var(--border); border-radius:9px; }
+.badge { padding:5px 8px; border-radius:5px; font-size:12px; font-weight:bold; }
+.ok { background:#d9f5e8; color:#11623e; }
+.cancelled { background:#fde2e0; color:#9b2119; }
+.meter { height:20px; background:#e4eaf1; border-radius:20px; overflow:hidden; margin:12px 0; }
+.meter span { display:block; height:100%; background:var(--green); transition:width .2s; }
+.notice { background:#fff5d8; padding:12px; border-radius:8px; margin:12px 0; }
+.muted { color:#64748b; font-size:13px; }
+footer { padding:20px; text-align:center; color:#64748b; font-size:12px; }
+@media(max-width:600px) { header h1{font-size:20px} main{padding:18px 4%} th,td{padding:8px} }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>YAZAKI KM9 — Gestion du propane</h1>
+  <p>Suivi des livraisons, de la citerne et des relevés techniques</p>
+</header>
+
+<nav>
+  <button class="navbtn active" data-tab="dashboard">Tableau de bord</button>
+  <button class="navbtn" data-tab="livraisons">Bons de livraison</button>
+  <button class="navbtn" data-tab="citerne">Suivi de la citerne</button>
+  <button class="navbtn" data-tab="technique">Relevés FPM</button>
+  <button class="navbtn" data-tab="admin">Administration</button>
+</nav>
+
+<main>
+<section id="dashboard" class="panel active">
+  <h2>Tableau de bord</h2>
+  <div class="cards">
+    <div class="card"><small>Capacité de la citerne</small><div class="metric">6 551,72 L</div></div>
+    <div class="card"><small>Niveau actuel</small><div class="metric" id="dashLevel">— %</div></div>
+    <div class="card"><small>Volume théorique</small><div class="metric" id="dashVolume">— L</div></div>
+    <div class="card"><small>BL enregistrés</small><div class="metric" id="dashBL">0</div></div>
+    <div class="card"><small>Écart cumulé livré/planifié</small><div class="metric" id="dashGap">0 L</div></div>
+  </div>
+  <div class="box">
+    <h3>État de la citerne</h3>
+    <div class="meter"><span id="dashMeter" style="width:0%"></span></div>
+    <p id="dashTankText">Aucun relevé de niveau enregistré.</p>
+  </div>
+  <div class="box">
+    <h3>Derniers bons de livraison</h3>
+    <div id="recentBL" class="muted">Aucun bon de livraison enregistré.</div>
+  </div>
+</section>
+
+<section id="livraisons" class="panel">
+  <h2>Bons de livraison</h2>
+  <div class="box">
+    <h3>Ajouter un bon de livraison</h3>
+    <form id="blForm">
+      <div class="grid">
+        <div class="field"><label for="blNumber">Numéro du BL *</label><input id="blNumber" required></div>
+        <div class="field"><label for="blDate">Date de livraison *</label><input id="blDate" type="date" required></div>
+        <div class="field"><label for="planned">Quantité planifiée (L) *</label><input id="planned" type="number" min="0" step="0.01" required></div>
+        <div class="field"><label for="delivered">Quantité livrée (L) *</label><input id="delivered" type="number" min="0" step="0.01" required></div>
+        <div class="field"><label for="tankBefore">Niveau avant livraison (%)</label><input id="tankBefore" type="number" min="0" max="100" step="0.01"></div>
+        <div class="field"><label for="tankAfter">Niveau après livraison (%)</label><input id="tankAfter" type="number" min="0" max="100" step="0.01"></div>
+        <div class="field"><label for="blFile">Document BL (PDF ou image)</label><input id="blFile" type="file" accept=".pdf,image/*"></div>
+      </div>
+      <div class="notice">
+        <strong>Écart livré / planifié :</strong>
+        <span id="liveGap">0,00 L</span>
+        <div class="muted">Écart = quantité livrée − quantité planifiée. Une valeur négative indique une livraison inférieure au plan.</div>
+      </div>
+      <button class="primary" type="submit">Enregistrer le BL</button>
+    </form>
+  </div>
+  <div class="box">
+    <h3>Historique des livraisons</h3>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Date</th><th>N° BL</th><th>Planifié (L)</th><th>Livré (L)</th>
+          <th>Écart (L)</th><th>Statut</th><th>Action</th>
+        </tr></thead>
+        <tbody id="blTable"></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="citerne" class="panel">
+  <h2>Suivi de la citerne unique</h2>
+  <div class="box">
+    <p><strong>Capacité totale à 100 % : 6 551,72 L</strong></p>
+    <form id="tankForm">
+      <div class="grid">
+        <div class="field">
+          <label for="level">Niveau mesuré (%) *</label>
+          <input id="level" type="number" min="0" max="100" step="0.01" required>
+        </div>
+        <div class="field">
+          <label for="volume">Volume théorique calculé (L)</label>
+          <input id="volume" readonly value="0,00">
+        </div>
+        <div class="field">
+          <label for="tankDate">Date et heure du relevé *</label>
+          <input id="tankDate" type="datetime-local" required>
+        </div>
+      </div>
+      <button class="primary" type="submit">Enregistrer le niveau</button>
+    </form>
+    <div class="meter"><span id="tankMeter" style="width:0%"></span></div>
+    <p id="tankSummary">Aucun niveau enregistré.</p>
+  </div>
+  <div class="box">
+    <h3>Historique des niveaux</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Date</th><th>Niveau (%)</th><th>Volume théorique (L)</th></tr></thead>
+      <tbody id="tankTable"></tbody>
+    </table></div>
+  </div>
+</section>
+
+<section id="technique" class="panel">
+  <h2>Relevés techniques — Service technique FPM</h2>
+  <div class="box">
+    <p>Les relevés sont attribués au <strong>Service technique FPM</strong>. Aucun nom ou prénom n'est demandé.</p>
+    <form id="techForm">
+      <div class="grid">
+        <div class="field"><label for="techDate">Date et heure *</label><input id="techDate" type="datetime-local" required></div>
+        <div class="field"><label for="techLevel">Niveau mesuré (%) *</label><input id="techLevel" type="number" min="0" max="100" step="0.01" required></div>
+        <div class="field"><label for="techNote">Observations techniques</label><textarea id="techNote" rows="3" placeholder="Observations, anomalies, interventions…"></textarea></div>
+      </div>
+      <p><strong>Volume théorique :</strong> <span id="techVolume">0,00 L</span></p>
+      <button class="primary" type="submit">Enregistrer le relevé FPM</button>
+    </form>
+  </div>
+  <div class="box">
+    <h3>Historique technique</h3>
+    <div class="table-wrap"><table>
+      <thead><tr><th>Date</th><th>Service</th><th>Niveau (%)</th><th>Volume (L)</th><th>Observations</th></tr></thead>
+      <tbody id="techTable"></tbody>
+    </table></div>
+  </div>
+</section>
+
+<section id="admin" class="panel">
+  <h2>Administration</h2>
+  <div class="box">
+    <h3>Gestion des enregistrements</h3>
+    <p>Annuler un BL conserve son historique et le marque comme annulé. La suppression de l'historique des BL est définitive dans ce navigateur.</p>
+    <div class="actions">
+      <button class="danger" id="deleteHistory">Supprimer tout l’historique des BL</button>
+      <button class="secondary" id="exportCSV">Exporter les BL en CSV</button>
+      <button class="secondary" id="exportJSON">Sauvegarder les données en JSON</button>
+    </div>
+    <p class="muted">Cette démonstration locale ne dispose pas d'une authentification réelle. Les commandes d'administration ne sont pas protégées par un serveur.</p>
+  </div>
+  <div class="box">
+    <h3>Paramètres de la citerne</h3>
+    <p>Capacité totale : <strong>6 551,72 L</strong></p>
+    <p>Formule appliquée : <code>Volume (L) = Niveau (%) × 6551,72 / 100</code></p>
+  </div>
+</section>
+</main>
+<footer>Yazaki KM9 · Prototype de suivi propane · Données stockées localement dans le navigateur</footer>
+
+<script>
+"use strict";
+
+const CAPACITY = 6551.72;
+const $ = id => document.getElementById(id);
+const fmt = n => Number(n || 0).toLocaleString("fr-FR", {
+  minimumFractionDigits:2, maximumFractionDigits:2
+});
+const volumeFor = level => Math.max(0, Math.min(100, Number(level))) * CAPACITY / 100;
+const dateNow = () => new Date().toISOString().slice(0,16);
+
+function load(key) {
+  try { return JSON.parse(localStorage.getItem(key)) || []; }
+  catch { return []; }
+}
+function save(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+let bls = load("ykm9_bls");
+let tankReadings = load("ykm9_tank");
+let techReadings = load("ykm9_tech");
+
+function showTab(id) {
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("active", p.id === id));
+  document.querySelectorAll(".navbtn").forEach(b => b.classList.toggle("active", b.dataset.tab === id));
+}
+document.querySelectorAll(".navbtn").forEach(btn =>
+  btn.addEventListener("click", () => showTab(btn.dataset.tab))
+);
+
+$("planned").addEventListener("input", updateGap);
+$("delivered").addEventListener("input", updateGap);
+function updateGap() {
+  const gap = Number($("delivered").value || 0) - Number($("planned").value || 0);
+  $("liveGap").textContent = fmt(gap) + " L";
+  $("liveGap").style.color = gap < 0 ? "#c0392b" : "#16845b";
+}
+
+$("level").addEventListener("input", () => {
+  $("volume").value = fmt(volumeFor($("level").value));
+});
+$("techLevel").addEventListener("input", () => {
+  $("techVolume").textContent = fmt(volumeFor($("techLevel").value)) + " L";
+});
+
+$("tankDate").value = dateNow();
+$("techDate").value = dateNow();
+
+$("blForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const number = $("blNumber").value.trim();
+  if (bls.some(b => b.number === number)) {
+    alert("Ce numéro de BL existe déjà.");
+    return;
+  }
+
+  const file = $("blFile").files[0];
+  let attachment = null;
+  if (file) {
+    if (file.size > 2 * 1024 * 1024) {
+      alert("Le fichier dépasse 2 Mo. Veuillez choisir un fichier plus petit.");
+      return;
+    }
+    attachment = {name:file.name, type:file.type, data:await toDataURL(file)};
+  }
+
+  bls.unshift({
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    number, date:$("blDate").value,
+    planned:Number($("planned").value),
+    delivered:Number($("delivered").value),
+    gap:Number($("delivered").value)-Number($("planned").value),
+    before:$("tankBefore").value === "" ? null : Number($("tankBefore").value),
+    after:$("tankAfter").value === "" ? null : Number($("tankAfter").value),
+    attachment, status:"Actif", createdAt:new Date().toISOString()
+  });
+
+  save("ykm9_bls", bls);
+  e.target.reset();
+  updateGap();
+  render();
+  alert("Bon de livraison enregistré.");
+});
+
+function toDataURL(file) {
+  return new Promise((resolve,reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function cancelBL(id) {
+  const b = bls.find(item => item.id === id);
+  if (!b || b.status === "Annulé") return;
+  if (!confirm("Confirmer l'annulation du BL " + b.number + " ?")) return;
+  b.status = "Annulé";
+  b.cancelledAt = new Date().toISOString();
+  save("ykm9_bls", bls);
+  render();
+}
+
+$("tankForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const level = Number($("level").value);
+  if (level < 0 || level > 100) return alert("Le niveau doit être compris entre 0 et 100 %.");
+  tankReadings.unshift({
+    date:$("tankDate").value, level, volume:volumeFor(level)
+  });
+  save("ykm9_tank", tankReadings);
+  render();
+  alert("Niveau de citerne enregistré.");
+});
+
+$("techForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const level = Number($("techLevel").value);
+  if (level < 0 || level > 100) return alert("Le niveau doit être compris entre 0 et 100 %.");
+  techReadings.unshift({
+    date:$("techDate").value,
+    service:"Service technique FPM",
+    level, volume:volumeFor(level),
+    note:$("techNote").value.trim()
+  });
+  save("ykm9_tech", techReadings);
+  e.target.reset();
+  $("techDate").value = dateNow();
+  $("techVolume").textContent = "0,00 L";
+  render();
+  alert("Relevé technique FPM enregistré.");
+});
+
+$("deleteHistory").addEventListener("click", () => {
+  if (!confirm("ATTENTION : supprimer définitivement tout l'historique des BL de ce navigateur ?")) return;
+  if (!confirm("Dernière confirmation : cette action ne peut pas être annulée.")) return;
+  bls = [];
+  save("ykm9_bls", bls);
+  render();
+});
+
+function csvEscape(v) {
+  return '"' + String(v ?? "").replaceAll('"','""') + '"';
+}
+$("exportCSV").addEventListener("click", () => {
+  const rows = [
+    ["Date","Numéro BL","Planifié (L)","Livré (L)","Écart (L)","Statut"],
+    ...bls.map(b => [b.date,b.number,b.planned,b.delivered,b.gap,b.status])
+  ];
+  const csv = "\uFEFF" + rows.map(row => row.map(csvEscape).join(";")).join("\r\n");
+  download("yazaki_km9_bons_livraison.csv", csv, "text/csv;charset=utf-8");
+});
+$("exportJSON").addEventListener("click", () => {
+  download("yazaki_km9_sauvegarde.json",
+    JSON.stringify({bls,tankReadings,techReadings},null,2),
+    "application/json");
+});
+function download(filename, content, type) {
+  const url = URL.createObjectURL(new Blob([content],{type}));
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function render() {
+  $("blTable").innerHTML = bls.length ? bls.map(b => `
+    <tr>
+      <td>${escapeHTML(b.date)}</td>
+      <td>${escapeHTML(b.number)} ${b.attachment ? `<br><button class="secondary" onclick="openAttachment('${b.id}')">Document</button>` : ""}</td>
+      <td>${fmt(b.planned)}</td><td>${fmt(b.delivered)}</td>
+      <td style="color:${b.gap<0?'#c0392b':b.gap>0?'#16845b':'inherit'}">${fmt(b.gap)}</td>
+      <td><span class="badge ${b.status==="Annulé"?"cancelled":"ok"}">${b.status}</span></td>
+      <td>${b.status==="Actif" ? `<button class="danger" onclick="cancelBL('${b.id}')">Annuler</button>` : "—"}</td>
+    </tr>`).join("") :
+    '<tr><td colspan="7">Aucun bon de livraison enregistré.</td></tr>';
+
+  const active = bls.filter(b => b.status === "Actif");
+  const gap = active.reduce((sum,b) => sum + b.gap, 0);
+  $("dashBL").textContent = bls.length;
+  $("dashGap").textContent = fmt(gap) + " L";
+  $("recentBL").innerHTML = bls.length
+    ? bls.slice(0,5).map(b => `${escapeHTML(b.date)} — BL ${escapeHTML(b.number)} — ${b.status}`).join("<br>")
+    : "Aucun bon de livraison enregistré.";
+
+  if (tankReadings.length) {
+    const t = tankReadings[0];
+    $("dashLevel").textContent = fmt(t.level) + " %";
+    $("dashVolume").textContent = fmt(t.volume) + " L";
+    $("dashMeter").style.width = t.level + "%";
+    $("tankMeter").style.width = t.level + "%";
+    $("tankSummary").textContent = `${fmt(t.level)} % — ${fmt(t.volume)} L théoriques — relevé du ${t.date}`;
+    $("dashTankText").textContent = `Dernier relevé : ${t.date}. Volume théorique : ${fmt(t.volume)} L.`;
+  } else {
+    $("dashLevel").textContent = "— %";
+    $("dashVolume").textContent = "— L";
+    $("dashMeter").style.width = "0%";
+    $("tankMeter").style.width = "0%";
+    $("tankSummary").textContent = "Aucun niveau enregistré.";
+    $("dashTankText").textContent = "Aucun relevé de niveau enregistré.";
+  }
+
+  $("tankTable").innerHTML = tankReadings.map(t =>
+    `<tr><td>${escapeHTML(t.date)}</td><td>${fmt(t.level)} %</td><td>${fmt(t.volume)} L</td></tr>`
+  ).join("") || '<tr><td colspan="3">Aucun relevé.</td></tr>';
+
+  $("techTable").innerHTML = techReadings.map(t =>
+    `<tr><td>${escapeHTML(t.date)}</td><td>${escapeHTML(t.service)}</td><td>${fmt(t.level)} %</td><td>${fmt(t.volume)} L</td><td>${escapeHTML(t.note || "—")}</td></tr>`
+  ).join("") || '<tr><td colspan="5">Aucun relevé technique.</td></tr>';
+}
+
+function openAttachment(id) {
+  const b = bls.find(item => item.id === id);
+  if (!b || !b.attachment) return;
+  const win = window.open();
+  if (!win) return alert("Autorisez les fenêtres contextuelles pour consulter le document.");
+  win.document.write("<title>Document BL</title>");
+  const link = win.document.createElement("a");
+  link.href = b.attachment.data;
+  link.download = b.attachment.name;
+  link.textContent = "Ouvrir ou télécharger " + b.attachment.name;
+  win.document.body.appendChild(link);
+}
+
+function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, ch => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"
+  })[ch]);
+}
+
+render();
+</script>
+</body>
+</html>
